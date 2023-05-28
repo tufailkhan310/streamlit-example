@@ -1,38 +1,55 @@
-from collections import namedtuple
-import altair as alt
-import math
-import pandas as pd
-import streamlit as st
-
-"""
-# Welcome to Streamlit!
-
-Edit `/streamlit_app.py` to customize this app to your heart's desire :heart:
-
-If you have any questions, checkout our [documentation](https://docs.streamlit.io) and [community
-forums](https://discuss.streamlit.io).
-
-In the meantime, below is an example of what you can do with just a few lines of code:
-"""
+import os
+import tensorflow as tf
+import numpy as np
+from tensorflow.keras.preprocessing import image
+from PIL import Image
+import cv2
+from keras.models import load_model
+from flask import Flask, request, render_template
+from werkzeug.utils import secure_filename
 
 
-with st.echo(code_location='below'):
-    total_points = st.slider("Number of points in spiral", 1, 5000, 2000)
-    num_turns = st.slider("Number of turns in spiral", 1, 100, 9)
+app = Flask(__name__)
+model = load_model('E:\\FYP\\Test\\BrainTumor20Epohs.h5')
+print('Model loaded. Check http://127.0.0.1:5000/')
 
-    Point = namedtuple('Point', 'x y')
-    data = []
 
-    points_per_turn = total_points / num_turns
+def get_className(classNo):
+    if classNo == 0:
+        return "No Brain Tumor"
+    elif classNo == 1:
+        return "Yes Brain Tumor"
 
-    for curr_point_num in range(total_points):
-        curr_turn, i = divmod(curr_point_num, points_per_turn)
-        angle = (curr_turn + 1) * 2 * math.pi * i / points_per_turn
-        radius = curr_point_num / total_points
-        x = radius * math.cos(angle)
-        y = radius * math.sin(angle)
-        data.append(Point(x, y))
 
-    st.altair_chart(alt.Chart(pd.DataFrame(data), height=500, width=500)
-        .mark_circle(color='#0068c9', opacity=0.5)
-        .encode(x='x:Q', y='y:Q'))
+def getResult(img):
+    image = cv2.imread(img)
+    image = Image.fromarray(image, 'RGB')
+    image = image.resize((64, 64))
+    image = np.array(image)
+    input_img = np.expand_dims(image, axis=0)
+    result = model.predict(input_img)
+    return result
+
+
+@app.route('/', methods=['GET'])
+def index():
+    return render_template('index.html')
+
+
+@app.route('/predict', methods=['GET', 'POST'])
+def upload():
+    if request.method == 'POST':
+        f = request.files['file']
+
+        basepath = os.path.dirname(__file__)
+        file_path = os.path.join(
+            basepath, 'uploads', secure_filename(f.filename))
+        f.save(file_path)
+        value = getResult(file_path)
+        result = get_className(value)
+        return result
+    return None
+
+
+if __name__ == '__main__':
+    app.run(debug=True)
